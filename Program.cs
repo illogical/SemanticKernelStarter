@@ -16,15 +16,16 @@ var builder = Kernel.CreateBuilder()
 #pragma warning restore SKEXP0070 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
 
 // Add enterprise components
-builder.Services.AddLogging(services => services.AddConsole().SetMinimumLevel(LogLevel.Trace));
+//builder.Services.AddLogging(services => services.AddConsole().SetMinimumLevel(LogLevel.Trace));
 
 // Build the kernel
 Kernel kernel = builder.Build();
 var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
 
+
 // Create prompt execution settings for Ollama
 #pragma warning disable SKEXP0070 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
-var ollamaPromptExecutionSettings = new OllamaPromptExecutionSettings()
+var ollamaPromptExecutionSettings = new OllamaPromptExecutionSettings
 {
     FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
 };
@@ -41,18 +42,28 @@ do
     Console.Write("User > ");
     userInput = Console.ReadLine();
 
+    if (string.IsNullOrEmpty(userInput))
+        break;
+
     // Add user input
     history.AddUserMessage(userInput);
 
-    // Get the response from the AI
-    var result = await chatCompletionService.GetChatMessageContentAsync(
+    // Print "Assistant > " without newline
+    Console.Write("Assistant > ");
+
+    // Stream the response
+    string fullResponse = "";
+    await foreach (var content in chatCompletionService.GetStreamingChatMessageContentsAsync(
         history,
         executionSettings: ollamaPromptExecutionSettings,
-        kernel: kernel);
+        kernel: kernel))
+    {
+        // Print each chunk of the response as it arrives
+        Console.Write(content.Content);
+        fullResponse += content.Content;
+    }
+    Console.WriteLine(); // Add newline after response is complete
 
-    // Print the results
-    Console.WriteLine("Assistant > " + result);
-
-    // Add the message from the agent to the chat history
-    history.AddMessage(result.Role, result.Content ?? string.Empty);
-} while (userInput is not null);
+    // Add the complete message to the chat history
+    history.AddAssistantMessage(fullResponse);
+} while (true);
