@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.Ollama;
+using SemanticKernelStarter;
 
 // Populate values for Ollama
 var modelId = "phi4"; // or your preferred Ollama model
@@ -22,7 +23,6 @@ var builder = Kernel.CreateBuilder()
 Kernel kernel = builder.Build();
 var chatCompletionService = kernel.GetRequiredService<IChatCompletionService>();
 
-
 // Create prompt execution settings for Ollama
 #pragma warning disable SKEXP0070 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
 var ollamaPromptExecutionSettings = new OllamaPromptExecutionSettings
@@ -36,6 +36,7 @@ var history = new ChatHistory();
 
 // Initiate a back-and-forth chat
 string? userInput;
+string historyFile = "chat_history.json";
 do
 {
     // Collect user input
@@ -66,4 +67,14 @@ do
 
     // Add the complete message to the chat history
     history.AddAssistantMessage(fullResponse);
+
+    // Save the updated chat history to file
+    try
+    {
+        File.WriteAllText(historyFile, history.ToJson());
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error saving chat history: {ex.Message}");
+    }
 } while (true);
