@@ -1,11 +1,9 @@
-﻿// Import packages
-using Microsoft.SemanticKernel;
+﻿using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.Ollama;
 using SemanticKernelStarter;
 using System.Diagnostics;
 
-// Populate values for Ollama
 var modelId = "codestral";
 var endpoint = "http://localhost:11434"; // default Ollama endpoint
 
@@ -36,22 +34,20 @@ string? userInput;
 
 do
 {
-    // Get current timestamp for user input
-    var userTimestamp = DateTime.Now;
-
     // Collect user input
-    Console.Write($"[{userTimestamp:yyyy-MM-dd HH:mm:ss}] User > ");
+    Console.Write($"Prompt > ");
     userInput = Console.ReadLine();
 
-    if (string.IsNullOrEmpty(userInput))
+    if (string.IsNullOrWhiteSpace(userInput))
+    {
+        Console.WriteLine("Exiting...");
         break;
+    }
 
     // Add user input
     history.AddUserMessage(userInput);
 
-    // Get timestamp for assistant response start
-    var assistantStartTime = DateTime.Now;
-    Console.Write($"[{assistantStartTime:yyyy-MM-dd HH:mm:ss}] Assistant > ");
+    Console.Write($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Assistant > ");
 
     // Create stopwatch to measure response time
     var stopwatch = Stopwatch.StartNew();
@@ -75,7 +71,7 @@ do
     // Print completion time and response duration
     var completionTime = DateTime.Now;
     Console.WriteLine(); // Add newline after response
-    Console.WriteLine($"[{completionTime:yyyy-MM-dd HH:mm:ss}] Response completed in {elapsedSeconds:F2} seconds");
+    Logger.Log($"Response completed in {elapsedSeconds:F2} seconds");
 
     // Add the complete message to the chat history
     history.AddAssistantMessage(fullResponse);
@@ -87,6 +83,6 @@ do
     }
     catch (Exception ex)
     {
-        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Error saving chat history: {ex.Message}");
+        Logger.Log($"Error saving chat history: {ex.Message}");
     }
 } while (true);
