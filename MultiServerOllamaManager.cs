@@ -4,6 +4,7 @@ using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.Ollama;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 
 namespace SemanticKernelStarter
 {
@@ -85,6 +86,63 @@ namespace SemanticKernelStarter
                 _serverSelectionLock.Release();
             }
         }
+
+        public async Task<Dictionary<string, (string Response, TimeSpan Duration)>> SendPromptToAllServersAsync(ChatHistory history, string prompt)
+        {
+            var tasks = new List<Task<(string ServerId, string Response, TimeSpan Duration)>>();
+
+            foreach (var serverEntry in _servers)
+            {
+                var serverId = serverEntry.Key;
+                var config = serverEntry.Value;
+
+                tasks.Add(SendPromptToServerAsync(serverId, config, history, prompt));
+            }
+
+            var results = await Task.WhenAll(tasks);
+
+            return results.ToDictionary(
+                r => r.ServerId,
+                r => (r.Response, r.Duration)
+            );
+        }
+
+        private async Task<(string ServerId, string Response, TimeSpan Duration)> SendPromptToServerAsync(
+            string serverId, OllamaServerConfig config, ChatHistory history, string prompt)
+        {
+            if (!_kernels.TryGetValue(serverId, out var kernel))
+            {
+                throw new InvalidOperationException($"Kernel not found for server {serverId}");
+            }
+
+            var chatService = kernel.GetRequiredService<IChatCompletionService>();
+#pragma warning disable SKEXP0070 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
+            var settings = new OllamaPromptExecutionSettings
+            {
+                Temperature = config.Temperature,
+                FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
+            };
+#pragma warning restore SKEXP0070 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
+
+            var localHistory = new ChatHistory(history);
+            localHistory.AddUserMessage(prompt);
+
+            var stopwatch = Stopwatch.StartNew();
+            string fullResponse = "";
+
+            await foreach (var content in chatService.GetStreamingChatMessageContentsAsync(
+                localHistory,
+                executionSettings: settings,
+                kernel: kernel))
+            {
+                fullResponse += content.Content;
+            }
+
+            stopwatch.Stop();
+
+            return (serverId, fullResponse, stopwatch.Elapsed);
+        }
+    
 
         public async Task MarkServerStatus(string serverId, bool isAvailable)
         {

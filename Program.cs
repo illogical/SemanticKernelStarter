@@ -33,6 +33,17 @@ do
 
     Console.Write($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Assistant > ");
 
+    // Sample of dispatching a prompt to multiple Ollama servers at the same time.
+    // It will get back multiple responses so it cannot stream the results to the console.
+    //var results = await ollamaManager.SendPromptToAllServersAsync(history, userInput);
+    //foreach (var (serverId, (response, duration)) in results)
+    //{
+    //    Console.WriteLine($"Server {serverId} responded in {duration.TotalSeconds:F2} seconds:");
+    //    Console.WriteLine(response);
+    //    Console.WriteLine();
+    //}
+
+
     var (kernel, chatService, settings) = await ollamaManager.GetNextAvailableServerAsync();
 
     // Create stopwatch to measure response time
