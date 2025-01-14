@@ -1,34 +1,54 @@
-# Local AI Chat Client
+# Local AI Chat Client with Multi-Server Support
 
-This project is a simple console chat client that allows you to interact with local AI models using the Semantic Kernel framework and Ollama.
+This project is a console chat client that allows you to interact with local AI models using the Semantic Kernel framework and Ollama. It now supports multiple Ollama servers for load balancing and parallel querying.
 
 ## Features
 
-- Connects to local AI models through Ollama
-- Provides a simple command-line interface for chatting
+- Connects to multiple local AI models through Ollama servers
+- Provides load balancing across multiple Ollama servers
+- Supports parallel querying of multiple AI models
+- Offers a simple command-line interface for chatting
 - Utilizes the Semantic Kernel framework for AI interactions
 - Supports continuous conversation with chat history
 
 ## Prerequisites
 
-- .NET 6.0 or later
-- Ollama installed and running locally
-- A compatible AI model (default: "codestral")
+- .NET 9.0 or later
+- Ollama installed and running on one or more machines
+- Compatible AI models (configurable for each server)
 
 ## Setup
 
-1. Ensure Ollama is installed and running on your local machine.
+1. Ensure Ollama is installed and running on your local machine or remote servers.
 2. Clone this repository.
 3. Open the solution in your preferred C# IDE.
 
 ## Configuration
 
-The main configuration is done in the `Program.cs` file:
+The main configuration is now done in the `appsettings.json` file:
 
-- `modelId`: The ID of the AI model you want to use (default: "codestral")
-- `endpoint`: The Ollama endpoint URL (default: "http://localhost:11434")
+- Configure multiple Ollama servers with their respective endpoints, model IDs, and temperatures.
+- Each server can be configured with a unique ID, endpoint URL, model ID, and temperature setting.
 
-You can modify these values to use different models or endpoints.
+Example `appsettings.json`:
+
+```json
+{
+  "OllamaServers": [
+    {
+      "ServerId": "local1",
+      "Endpoint": "http://localhost:11434",
+      "ModelId": "codestral",
+      "Temperature": 0.7
+    },
+    {
+      "ServerId": "local2",
+      "Endpoint": "http://localhost:11435",
+      "ModelId": "llama2",
+      "Temperature": 0.5
+    }
+  ]
+}
 
 ## Usage
 

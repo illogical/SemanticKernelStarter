@@ -5,6 +5,7 @@ using Microsoft.SemanticKernel.ChatCompletion;
 using Microsoft.SemanticKernel.Connectors.Ollama;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace SemanticKernelStarter
 {
@@ -87,9 +88,9 @@ namespace SemanticKernelStarter
             }
         }
 
-        public async Task<Dictionary<string, (string Response, TimeSpan Duration)>> SendPromptToAllServersAsync(ChatHistory history, string prompt)
+        public async Task<Dictionary<string, (string ModelId, string Response, TimeSpan Duration)>> SendPromptToAllServersAsync(ChatHistory history, string prompt)
         {
-            var tasks = new List<Task<(string ServerId, string Response, TimeSpan Duration)>>();
+            var tasks = new List<Task<(string ServerId, string ModelId, string Response, TimeSpan Duration)>>();
 
             foreach (var serverEntry in _servers)
             {
@@ -103,11 +104,11 @@ namespace SemanticKernelStarter
 
             return results.ToDictionary(
                 r => r.ServerId,
-                r => (r.Response, r.Duration)
+                r => (r.ModelId, r.Response, r.Duration)
             );
         }
 
-        private async Task<(string ServerId, string Response, TimeSpan Duration)> SendPromptToServerAsync(
+        private async Task<(string ServerId, string ModelId, string Response, TimeSpan Duration)> SendPromptToServerAsync(
             string serverId, OllamaServerConfig config, ChatHistory history, string prompt)
         {
             if (!_kernels.TryGetValue(serverId, out var kernel))
@@ -140,9 +141,40 @@ namespace SemanticKernelStarter
 
             stopwatch.Stop();
 
-            return (serverId, fullResponse, stopwatch.Elapsed);
+            return (serverId, config.ModelId, fullResponse, stopwatch.Elapsed);
         }
-    
+
+        public async IAsyncEnumerable<(string ServerId, string ModelId, string Response, TimeSpan Duration)> SendPromptToAllServersStreamingAsync(
+    ChatHistory history,
+    string prompt,
+    [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            var tasks = new List<Task<(string ServerId, string ModelId, string Response, TimeSpan Duration)>>();
+
+            foreach (var serverEntry in _servers)
+            {
+                var serverId = serverEntry.Key;
+                var config = serverEntry.Value;
+
+                tasks.Add(SendPromptToServerAsync(serverId, config, history, prompt));
+            }
+
+            while (tasks.Count > 0)
+            {
+                var completedTask = await Task.WhenAny(tasks);
+                tasks.Remove(completedTask);
+
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    yield return await completedTask;
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+
 
         public async Task MarkServerStatus(string serverId, bool isAvailable)
         {

@@ -13,6 +13,8 @@ var ollamaManager = new MultiServerOllamaManager(configuration);
 // Create a history to store the conversation
 var history = new ChatHistory();
 
+var responseTimes = new List<string>();
+
 // Initiate a back-and-forth chat
 string? userInput;
 
@@ -31,46 +33,40 @@ do
     // Add user input
     history.AddUserMessage(userInput);
 
-    Console.Write($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Assistant > ");
+    Console.Write($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Assistant(s) > ");
 
     // Sample of dispatching a prompt to multiple Ollama servers at the same time.
-    // It will get back multiple responses so it cannot stream the results to the console.
+    // It will wait to get back multiple responses so it cannot stream the results to the console.
     //var results = await ollamaManager.SendPromptToAllServersAsync(history, userInput);
     //foreach (var (serverId, (response, duration)) in results)
     //{
+    //    history.AddAssistantMessage(response);
     //    Console.WriteLine($"Server {serverId} responded in {duration.TotalSeconds:F2} seconds:");
     //    Console.WriteLine(response);
     //    Console.WriteLine();
     //}
 
 
-    var (kernel, chatService, settings) = await ollamaManager.GetNextAvailableServerAsync();
-
-    // Create stopwatch to measure response time
-    var stopwatch = Stopwatch.StartNew();
-
-    // Stream the response
-    string fullResponse = "";
-    await foreach (var content in chatService.GetStreamingChatMessageContentsAsync(
-                   history,
-                   executionSettings: settings,
-                   kernel: kernel))
+    // Sample of dispatching a prompt to multiple Ollama servers at the same time.
+    // It will return back each response as they return rather than awaiting all servers to reply.
+    await foreach (var (serverId, modelId, response, duration) in ollamaManager.SendPromptToAllServersStreamingAsync(history, userInput))
     {
-        Console.Write(content.Content);
-        fullResponse += content.Content;
+        string responseTime = $"Server {serverId} with model {modelId} responded in {duration.TotalSeconds:F2} seconds";
+        responseTimes.Add(responseTime);
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Yellow;
+        Logger.Log(responseTime);
+        Console.ResetColor(); // Reset color back to default
+        Console.WriteLine(response);
+        Console.WriteLine();
+
+        history.AddAssistantMessage(response);
     }
 
-    // Stop the stopwatch and calculate elapsed time
-    stopwatch.Stop();
-    var elapsedSeconds = stopwatch.ElapsedMilliseconds / 1000.0;
-
-    // Print completion time and response duration
-    var completionTime = DateTime.Now;
-    Console.WriteLine(); // Add newline after response
-    Logger.Log($"Response completed in {elapsedSeconds:F2} seconds");
-
-    // Add the complete message to the chat history
-    history.AddAssistantMessage(fullResponse);
+    for (int i = 0; i < responseTimes.Count; i++)
+    {
+        Console.WriteLine($"{i+1}. {responseTimes[i]}");
+    }
 
     // Save the updated chat history to file with timestamps
     try
