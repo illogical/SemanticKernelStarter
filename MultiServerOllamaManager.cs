@@ -1,0 +1,97 @@
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
+using Microsoft.SemanticKernel.Connectors.Ollama;
+using System.Collections.Concurrent;
+
+namespace SemanticKernelStarter
+{
+    public class MultiServerOllamaManager
+    {
+        private readonly ConcurrentDictionary<string, OllamaServerConfig> _servers = new();
+        private readonly ConcurrentDictionary<string, Kernel> _kernels = new();
+        private readonly SemaphoreSlim _serverSelectionLock = new(1);
+
+        public MultiServerOllamaManager(IConfiguration configuration)
+        {
+            var serverConfigs = configuration.GetSection("OllamaServers").Get<List<OllamaServerConfig>>();
+
+            if (serverConfigs == null || !serverConfigs.Any())
+            {
+                throw new InvalidOperationException("No Ollama server configurations found in the configuration.");
+            }
+
+            foreach (var config in serverConfigs)
+            {
+                AddServer(config.ServerId, config.Endpoint, config.ModelId, config.Temperature);
+            }
+        }
+
+        public void AddServer(string serverId, string endpoint, string modelId, float temperature)
+        {
+            var config = new OllamaServerConfig
+            {
+                Endpoint = endpoint,
+                ModelId = modelId,
+                Temperature = temperature
+            };
+
+            _servers.TryAdd(serverId, config);
+
+            // Initialize kernel for this server
+#pragma warning disable SKEXP0070 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
+            var builder = Kernel.CreateBuilder()
+                .AddOllamaChatCompletion(modelId, new Uri(endpoint));
+#pragma warning restore SKEXP0070 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
+            var kernel = builder.Build();
+            _kernels.TryAdd(serverId, kernel);
+        }
+
+#pragma warning disable SKEXP0070 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
+        public async Task<(Kernel kernel, IChatCompletionService chatService, OllamaPromptExecutionSettings settings)>
+#pragma warning restore SKEXP0070 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
+            GetNextAvailableServerAsync()
+        {
+            await _serverSelectionLock.WaitAsync();
+            try
+            {
+                // Select server based on availability and last used time
+                var availableServer = _servers
+                    .Where(s => s.Value.IsAvailable)
+                    .OrderBy(s => s.Value.LastUsed)
+                    .FirstOrDefault();
+
+                if (availableServer.Key == null)
+                    throw new InvalidOperationException("No available servers");
+
+                var config = availableServer.Value;
+                config.LastUsed = DateTime.UtcNow;
+
+                var kernel = _kernels[availableServer.Key];
+                var chatService = kernel.GetRequiredService<IChatCompletionService>();
+#pragma warning disable SKEXP0070 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
+                var settings = new OllamaPromptExecutionSettings
+                {
+                    Temperature = config.Temperature,
+                    FunctionChoiceBehavior = FunctionChoiceBehavior.Auto()
+                };
+#pragma warning restore SKEXP0070 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
+
+                return (kernel, chatService, settings);
+            }
+            finally
+            {
+                _serverSelectionLock.Release();
+            }
+        }
+
+        public async Task MarkServerStatus(string serverId, bool isAvailable)
+        {
+            if (_servers.TryGetValue(serverId, out var config))
+            {
+                config.IsAvailable = isAvailable;
+            }
+        }
+    }
+}
